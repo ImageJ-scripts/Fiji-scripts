@@ -1,0 +1,13 @@
+This is a collection of Jython scripts written specifically for implementation in
+Fiji-ImageJ.
+
+To install as a plugin in Fiji simply:
+
+1. Open Fiji
+2. From the toolbar choose Plugin --> Install PlugIn
+3. Select the script
+
+The script gets copied into the "Plugins" folder of your Fiji installation and will
+appear under the Plugins menu.
+
+To remove simply delete the script from the "Plugins" folder.
