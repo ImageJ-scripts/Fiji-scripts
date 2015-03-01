@@ -3,6 +3,7 @@ import os
 import glob
 import time
 import math
+import shutil
 
 import ij
 from ij import IJ
@@ -22,6 +23,16 @@ from ome.xml.model.primitives import PositiveInteger,PositiveFloat
 from ome.xml.model.enums import DimensionOrder, PixelType
 
 from java.lang import StringBuffer
+
+def delete_tiles(tiles_dir):
+	print glob.glob("%s/*" % tiles_dir)
+	try:
+		for name in glob.glob("%s/*" % tiles_dir):
+			os.remove(name)
+		
+		shutil.rmtree(tiles_dir)
+	except:
+		pass 
 
 def write_fused(output_path,meta):
 	imp = ij.WindowManager.getCurrentImage()
@@ -124,7 +135,8 @@ def run_script(input_dir,gridX,gridY):
    			time.sleep(1)
 	reader.close()
 	run_stitching(tiles_dir,gridX,gridY)
-	write_fused(tiles_dir,outputMeta)
+	write_fused(input_dir,outputMeta)
+	delete_tiles(tiles_dir)
 
 def make_dialog():
 
