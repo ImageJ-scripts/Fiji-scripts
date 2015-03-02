@@ -25,9 +25,8 @@ from ome.xml.model.enums import DimensionOrder, PixelType
 from java.lang import StringBuffer
 
 def delete_tiles(tiles_dir):
-	print glob.glob("%s/*" % tiles_dir)
 	try:
-		for name in glob.glob("%s/*" % tiles_dir):
+		for name in glob.glob("%s*" % (tiles_dir)):
 			os.remove(name)
 		
 		shutil.rmtree(tiles_dir)
@@ -41,7 +40,7 @@ def write_fused(output_path,meta):
 	writer = ImageWriter()
 	writer.setCompression('LZW')
 	writer.setMetadataRetrieve(meta)
-	writer.setId("%s/fused.ome.tif"%output_path)
+	writer.setId("%sfused.ome.tif"%output_path)
 	littleEndian = not writer.getMetadataRetrieve().getPixelsBinDataBigEndian(0, 0)
 	planes = imp.getStack()
 	for p in range(planes.getSize()):
@@ -52,19 +51,18 @@ def write_fused(output_path,meta):
 def run_stitching(tiles_dir,gridX, gridY):
 	IJ.run("Grid/Collection stitching", "type=[Grid: snake by rows] order=[Right & Down                ] "\
 			"grid_size_x=%s grid_size_y=%s tile_overlap=20 first_file_index_i=0 "\
-			"directory=%s file_names=tile_{i}.ome.tif "\
+			"directory=[%s] file_names=tile_{i}.ome.tif "\
 			"output_textfile_name=TileConfiguration.txt fusion_method=[Linear Blending] "\
 			"regression_threshold=0.30 max/avg_displacement_threshold=2.50 "\
 			"absolute_displacement_threshold=3.50 compute_overlap "\
-			"computation_parameters=[Save memory (but be slower)] "\
-			"image_output=[Fuse and display]"%(gridX,gridY,tiles_dir))
+			"computation_parameters=[Save memory (but be slower)] "%(gridX,gridY,tiles_dir))
 
 
 def write_tiles(r,tiles_dir,theT,sizeC,sizeZ,meta):
 	writer = ImageWriter()
 	writer.setCompression('LZW')
 	writer.setMetadataRetrieve(meta)
-	filename = "%s/tile_%s.ome.tif"%(tiles_dir,theT)
+	filename = "%stile_%s.ome.tif"%(tiles_dir,theT)
 	writer.setId(filename)
 	planes = sizeZ * sizeC
 	p = 0
@@ -108,20 +106,21 @@ def set_metadata(inputMeta,outputMeta):
 def get_reader(file, inputMeta):
 	options = ImporterOptions()
 	options.setId(file)
-	imps = BF.openImagePlus(options)
+	#imps = BF.openImagePlus(options)
 	reader = ImageReader()
 	reader.setMetadataStore(inputMeta)
 	reader.setId(file)
 	return reader
 
 def run_script(input_dir,gridX,gridY):
-	input_path = glob.glob("%s/*.tiff"%input_dir)[0]
+	input_path = glob.glob("%s*.tiff"%input_dir)[0]
+	sep = os.path.sep
 	inputMeta = MetadataTools.createOMEXMLMetadata()
 	outputMeta = MetadataTools.createOMEXMLMetadata()
 	reader = get_reader(input_path,inputMeta)
 	outputMeta = set_metadata(inputMeta,outputMeta)
 
-	tiles_dir = os.path.join(input_dir,"tiles")
+	tiles_dir = os.path.join(input_dir,"tiles%s"%sep)
 	if not os.path.exists(tiles_dir):
 		os.makedirs(tiles_dir)
 		sizeZ = inputMeta.getPixelsSizeZ(0).getValue()
@@ -129,7 +128,7 @@ def run_script(input_dir,gridX,gridY):
 		sizeT = inputMeta.getPixelsSizeT(0).getValue()
 		for theT in range(sizeT):
 			write_tiles(reader,tiles_dir,theT,sizeC,sizeZ,outputMeta)
-		last_tile = tiles_dir + '/tile_%s.ome.tif'%(sizeT-1)
+		last_tile = tiles_dir + 'tile_%s.ome.tif'%(sizeT-1)
 		print last_tile
 		while not os.path.exists(last_tile):
    			time.sleep(1)
@@ -143,7 +142,21 @@ def make_dialog():
 	parameters = {}
 
 	gd = GenericDialogPlus("Grid Stitch SDC Data")
-		
+
+	gd.addMessage(  "Warning!\n"\
+					"In order to display a fused image upon completion of stitching\n"\
+					"please disable Fiji's ImageJ2 options. When enabled an ImageJ\n"\
+					"exception will be displayed upon completion. This exception can\n"
+					"be safely ignored.")
+
+	gd.addMessage(  "Information\n"\
+					"This plugin is a wrapper around the Fiji 'Grid Stitching' plugin.\n"\
+					"It allows tiles generated in SlideBook to be directly stitched by\n"\
+					"by first writing out the individual tiles, executing the 'Grid Stitching'\n"\
+					"plugin and writing the fused image to disk.")
+
+	gd.addMessage("")
+										
 	gd.addNumericField("grid_size_x", 3, 0)
 	gd.addNumericField("grid_size_y", 3, 0)
 		
@@ -154,11 +167,14 @@ def make_dialog():
 		
 	parameters['gridX'] = int(math.ceil(gd.getNextNumber()))
 	parameters['gridY'] = int(math.ceil(gd.getNextNumber()))
-		
-	parameters['directory'] = gd.getNextString()
-	if parameters['directory'] is None:
+	
+	directory = str(gd.getNextString())	
+	if directory is None:
 	# User canceled the dialog
 		return None
+	else:
+		directory = os.path.abspath(directory)
+		parameters['directory'] = directory + os.path.sep
 
 	return parameters
 
