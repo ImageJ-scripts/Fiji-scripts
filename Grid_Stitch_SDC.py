@@ -63,29 +63,19 @@ def run_stitching(tiles_dir,tile_name,gridX, gridY):
 			"absolute_displacement_threshold=3.50 compute_overlap "\
 			"computation_parameters=[Save memory (but be slower)] "%(gridX,gridY,tiles_dir,tile_name))
 	
-def write_tiles(r,tiles_dir,theT,sizeC,sizeZ,meta):
-	
-	planes = sizeZ * sizeC
-	outputfiles = []
-	if planes > 100:
-		# write out the channels separately and then stitch separately
-		for theC in range(sizeC):
-			outputfiles.append("%stile_%s_channel_%s.ome.tif"%(tiles_dir,theT,theC))
-	else:
-		outputfiles.append("%stile_%s.ome.tif"%(tiles_dir,theT))
+def write_tiles(r,tiles_dir,theT,sizeC,sizeZ,meta,outputfiles):
 
 	p = 0
-	for theF in range(len(outputfiles)):
-		IJ.log("Writing tile %s: %s"%(theT,outputfiles[theF]))
-		writer = ImageWriter()
-		writer.setCompression('LZW')
-		writer.setMetadataRetrieve(meta)
-		writer.setId(outputfiles[theF])
-		for theC in range(sizeC):
-			for theZ in range(sizeZ):
-				writer.saveBytes(p,r.openBytes(r.getIndex(theZ, theC, theT)))
-				p += 1
-		writer.close()
+	IJ.log("Writing tile %s: %s"%(theT,outputfile))
+	writer = ImageWriter()
+	writer.setCompression('LZW')
+	writer.setMetadataRetrieve(meta)
+	writer.setId(outputfiles[theF])
+	for theC in range(sizeC):
+		for theZ in range(sizeZ):
+			writer.saveBytes(p,r.openBytes(r.getIndex(theZ, theC, theT)))
+			p += 1
+	writer.close()
 
 def set_metadata(inputMeta,outputMeta,channels):
 
@@ -154,7 +144,8 @@ def run_script(input_dir,gridX,gridY):
 			set_metadata(inputMeta,outputMeta,channel_to_write)
 			sizeT = inputMeta.getPixelsSizeT(0).getValue()
 			for theT in range(sizeT):
-				write_tiles(reader,tiles_dir,theT,1,sizeZ,outputMeta)
+				outputfile = "%stile_%s_channel_%s.ome.tif"%(tiles_dir,theT,theC)
+				write_tiles(reader,tiles_dir,theT,1,sizeZ,outputMeta,outputfile)
 				
 		last_tile = tiles_dir + 'tile_%s_channel%s.ome.tif'%(sizeT-1,sizeC-1)
 		print last_tile
@@ -173,6 +164,7 @@ def run_script(input_dir,gridX,gridY):
    		set_metadata(inputMeta,outputMeta,channels)
 		sizeT = inputMeta.getPixelsSizeT(0).getValue()
 		for theT in range(sizeT):
+			outputfile = "%stile_%s.ome.tif"%(tiles_dir,theT)
 			write_tiles(reader,tiles_dir,theT,sizeC,sizeZ,outputMeta)
 				
 		last_tile = tiles_dir + 'tile_%s.ome.tif'%(sizeT-1)
