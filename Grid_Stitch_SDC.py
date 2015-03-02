@@ -63,7 +63,7 @@ def run_stitching(tiles_dir,tile_name,gridX, gridY):
 			"absolute_displacement_threshold=3.50 compute_overlap "\
 			"computation_parameters=[Save memory (but be slower)] "%(gridX,gridY,tiles_dir,tile_name))
 	
-def write_tiles(r,tiles_dir,theT,sizeC,sizeZ,meta,outputfile):
+def write_tiles(r,tiles_dir,theT,channels,sizeZ,meta,outputfile):
 
 	p = 0
 	IJ.log("Writing tile %s: %s"%(theT,outputfile))
@@ -71,7 +71,7 @@ def write_tiles(r,tiles_dir,theT,sizeC,sizeZ,meta,outputfile):
 	writer.setCompression('LZW')
 	writer.setMetadataRetrieve(meta)
 	writer.setId(outputfile)
-	for theC in range(sizeC):
+	for theC in channels:
 		for theZ in range(sizeZ):
 			writer.saveBytes(p,r.openBytes(r.getIndex(theZ, theC, theT)))
 			p += 1
@@ -145,7 +145,7 @@ def run_script(input_dir,gridX,gridY):
 			sizeT = inputMeta.getPixelsSizeT(0).getValue()
 			for theT in range(sizeT):
 				outputfile = "%stile_%s_channel_%s.ome.tif"%(tiles_dir,theT,theC)
-				write_tiles(reader,tiles_dir,theT,1,sizeZ,outputMeta,outputfile)
+				write_tiles(reader,tiles_dir,theT,[theC],sizeZ,outputMeta,outputfile)
 				
 		last_tile = tiles_dir + 'tile_%s_channel%s.ome.tif'%(sizeT-1,sizeC-1)
 		print last_tile
@@ -165,7 +165,7 @@ def run_script(input_dir,gridX,gridY):
 		sizeT = inputMeta.getPixelsSizeT(0).getValue()
 		for theT in range(sizeT):
 			outputfile = "%stile_%s.ome.tif"%(tiles_dir,theT)
-			write_tiles(reader,tiles_dir,theT,sizeC,sizeZ,outputMeta,outputfile)
+			write_tiles(reader,tiles_dir,theT,range(len(channels)),sizeZ,outputMeta,outputfile)
 				
 		last_tile = tiles_dir + 'tile_%s.ome.tif'%(sizeT-1)
 		print last_tile
