@@ -29,25 +29,69 @@ from ome.xml.model.enums import DimensionOrder, PixelType
 
 from java.lang import StringBuffer
 
-def write_fused(output_path,meta):
-	imp = ij.WindowManager.getCurrentImage()
-	planes = imp.getStack()
+def delete_slices(slices_dir):
+	try:
+		for name in glob.glob("%simg*" % (slices_dir)):
+			os.remove(name)
+	except:
+		pass 
+
+def write_fused(output_path,channel,sizeZ,theC):
+
+	# determine the number of subsets that need to be written
+	slices_per_subset = 200
+	num_output_files = divmod(sizeZ,slices_per_subset)
+	fpaths = []
+	if num_output_files[0] == 0:
+		nslices = [sizeZ]
+		num_output_files = 1
+		fpaths.append("%sfused.ome.tif"%output_path)
+	else:
+		nslices = []
+		for n in range(num_output_files[0]):
+			nslices.append(slices_per_subset)
+
+		if num_output_files[1] > 0:
+			nslices.append(num_output_files[1])		
+		
+		for s in range(len(nslices)):
+			fpaths.append("%sfused_subset%s.ome.tif"%(output_path,str(s)))
+
+	# get the base metadata from the first fused image
+	meta = MetadataTools.createOMEXMLMetadata()
+	reader = get_reader(output_path+"img_t1_z01_c1",meta)
+	reader.close()
 	
-	meta.setPixelsSizeX(PositiveInteger(imp.getWidth()),0)
-	meta.setPixelsSizeY(PositiveInteger(imp.getHeight()),0)
+	# reset some metadata
+	meta.setPixelsSizeZ(PositiveInteger(sizeZ),0)
+	meta.setChannelID("Channel:0:" + str(0), 0, 0)
+	spp = channel['spp']
+	meta.setChannelSamplesPerPixel(spp, 0, 0)
+	name = channel['name']
+	color = channel['color']
+	meta.setChannelName(name,0,0)
+	meta.setChannelColor(color,0,0)
+
+	# setup a writer
 	writer = ImageWriter()
 	writer.setCompression('LZW')
 	writer.setMetadataRetrieve(meta)
-	file_path = "%sfused.ome.tif"%output_path
-	if os.path.exists(file_path):
-		os.remove(file_path)
-	writer.setId(file_path)
-	print writer.getFormat()
-	littleEndian = not writer.getMetadataRetrieve().getPixelsBinDataBigEndian(0, 0)
-	
-	for p in range(planes.getSize()):
-		proc = planes.getProcessor(p+1)
-		writer.saveBytes(p,DataTools.shortsToBytes(proc.getPixels(), littleEndian))
+	writer.setId(fpaths[0])
+
+	# write the slices, changing the output file when necessary
+	theZ = 0
+	for f in range(len(fpaths)):
+		writer.changeOutputFile(fpaths[f])
+		for s in range(nslices[f]):
+			fpath = output_path+"img_t1_z0%s_c%s"%(str(theZ+1),str(theC))
+			if theZ+1 > 9:
+				fpath = output_path+"img_t1_z%s_c%s"%(str(theZ+1),str(theC))
+			print fpath
+			m = MetadataTools.createOMEXMLMetadata()
+			r = get_reader(fpath,m)
+			writer.saveBytes(theZ,r.openBytes(0))
+			r.close()
+			theZ += 1
 	writer.close()
 
 def run_stitching(tiles_dir,tile_name,gridX, gridY):
@@ -96,7 +140,9 @@ def set_metadata(inputMeta,outputMeta,chan):
 	return outputMeta
 
 def tile_info(meta):
-	return meta.getPixelsSizeT(0).getValue()
+	tiles = meta.getPixelsSizeT(0).getValue()
+	slices = meta.getPixelsSizeZ(0).getValue()
+	return tiles,slices
 
 def channel_info(meta):
 	sizeC = meta.getPixelsSizeC(0).getValue()
@@ -130,7 +176,7 @@ def run_script(input_dir,gridX,gridY,select_channel,channel):
 
 	complete_meta = original_metadata[0]
 	channels = channel_info(complete_meta)
-	num_tiles = tile_info(complete_meta)
+	num_tiles,num_slices = tile_info(complete_meta)
 	for t in range(num_tiles):
 		for c,chan in enumerate(channels):
 			frag = "Z00_T%s_C%s"%(t,c)
@@ -147,16 +193,20 @@ def run_script(input_dir,gridX,gridY,select_channel,channel):
 	if select_channel:
 		tile_names = "Z00_T{i}_C%s.tiff"%channel
 		run_stitching(input_dir,tile_names,gridX,gridY)
+		write_fused(input_dir,channels[channel],num_slices,channel+1) # channel index starts at 1
 	else:
 		for theC in range(len(channels)):
 			tile_names = "Z00_T{i}_C%s.tiff"%theC
 			run_stitching(input_dir,tile_names,gridX,gridY)
+			write_fused(input_dir,channels[theC],num_slices,theC+1) # channel index starts at 1
 
 	# restore original metadata and filename to tiles
 	rewritten_data = glob.glob("%s*.tiff"%input_dir)
 	for f,filename in enumerate(rewritten_data):
 		replace_meta(original_metadata[f],filename)
 		os.rename(filename,prefix+os.path.basename(filename))
+
+	delete_slices(input_dir)
 		
 def make_dialog():
 
