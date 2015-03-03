@@ -38,6 +38,13 @@ def delete_slices(slices_dir):
 
 def write_fused(output_path,channel,sizeZ,theC):
 
+	# number of slices will determine filename format
+	digits = "00"
+	if sizeZ < 100:
+		digits = "0"
+	if sizeZ < 10:
+		digits = ""
+		
 	# determine the number of subsets that need to be written
 	slices_per_subset = 200
 	num_output_files = divmod(sizeZ,slices_per_subset)
@@ -59,7 +66,7 @@ def write_fused(output_path,channel,sizeZ,theC):
 
 	# get the base metadata from the first fused image
 	meta = MetadataTools.createOMEXMLMetadata()
-	reader = get_reader(output_path+"img_t1_z01_c1",meta)
+	reader = get_reader(output_path+"img_t1_z%s1_c1"%digits,meta)
 	reader.close()
 	
 	# reset some metadata
@@ -83,8 +90,12 @@ def write_fused(output_path,channel,sizeZ,theC):
 	for f in range(len(fpaths)):
 		writer.changeOutputFile(fpaths[f])
 		for s in range(nslices[f]):
-			fpath = output_path+"img_t1_z0%s_c%s"%(str(theZ+1),str(theC))
-			if theZ+1 > 9:
+			fpath = output_path+"img_t1_z%s%s_c%s"%(digits,str(theZ+1),str(theC))
+			if (len(digits) == 1) and (theZ+1 > 9):
+				fpath = output_path+"img_t1_z%s_c%s"%(str(theZ+1),str(theC))
+			if (len(digits) == 2) and (theZ+1 > 9):
+				fpath = output_path+"img_t1_z0%s_c%s"%(str(theZ+1),str(theC))
+			if (len(digits) == 1) and (theZ+1 > 99):
 				fpath = output_path+"img_t1_z%s_c%s"%(str(theZ+1),str(theC))
 			print fpath
 			m = MetadataTools.createOMEXMLMetadata()
@@ -102,7 +113,7 @@ def run_stitching(tiles_dir,tile_name,gridX, gridY):
 			"regression_threshold=0.30 max/avg_displacement_threshold=2.50 "\
 			"absolute_displacement_threshold=3.50 compute_overlap "\
 			"computation_parameters=[Save memory (but be slower)] "\
-			"image_output=[Write to disk] output_directory=%s"%(gridX,gridY,tiles_dir,tile_name,tiles_dir))
+			"image_output=[Write to disk] output_directory=[%s]"%(gridX,gridY,tiles_dir,tile_name,tiles_dir))
 
 def replace_meta(meta,filename):
 	newComment = meta.dumpXML()
@@ -164,9 +175,13 @@ def get_reader(file, complete_meta):
 def run_script(input_dir,gridX,gridY,select_channel,channel):
 
 	input_data = glob.glob("%s*.tiff"%input_dir)
-	first = [s for s in input_data if "Z00_T0_C0" in s][0]
+	first = [s for s in input_data if "T0_C0" in s][0]
+	start = first.index("Z")+1
+	sub = first[start:]
+	stop = sub.index("_")
+	digits = sub[:stop]
 	sep = os.path.sep
-
+	print digits
 	original_metadata = []
 	for filename in input_data:
 		meta = MetadataTools.createOMEXMLMetadata()
@@ -179,24 +194,24 @@ def run_script(input_dir,gridX,gridY,select_channel,channel):
 	num_tiles,num_slices = tile_info(complete_meta)
 	for t in range(num_tiles):
 		for c,chan in enumerate(channels):
-			frag = "Z00_T%s_C%s"%(t,c)
+			frag = "Z%s_T%s_C%s"%(digits,t,c)
 			input_path = [s for s in input_data if frag in s][0]
 			tile_meta = MetadataTools.createOMEXMLMetadata()
 			tile_meta = set_metadata(complete_meta,tile_meta,chan)
 			replace_meta(tile_meta,input_path)
 
-	idx = input_data[0].index("Z00_T0_C0.tiff")
+	idx = input_data[0].index("Z%s_T0_C0.tiff"%digits)
 	prefix = input_data[0][:idx]
 	for filename in input_data:
 		os.rename(filename,input_dir+filename[idx:])
 		
 	if select_channel:
-		tile_names = "Z00_T{i}_C%s.tiff"%channel
+		tile_names = "Z%s_T{i}_C%s.tiff"%(digits,channel)
 		run_stitching(input_dir,tile_names,gridX,gridY)
 		write_fused(input_dir,channels[channel],num_slices,channel+1) # channel index starts at 1
 	else:
 		for theC in range(len(channels)):
-			tile_names = "Z00_T{i}_C%s.tiff"%theC
+			tile_names = "Z%s_T{i}_C%s.tiff"%(digits,theC)
 			run_stitching(input_dir,tile_names,gridX,gridY)
 			write_fused(input_dir,channels[theC],num_slices,theC+1) # channel index starts at 1
 
