@@ -38,6 +38,15 @@ def delete_slices(slices_dir):
 
 def write_fused(output_path,channel,sizeZ,theC):
 
+	IJ.log("Writing fused data")
+
+	# number of slices will determine filename format
+	digits = "00"
+	if sizeZ < 100:
+		digits = "0"
+	if sizeZ < 10:
+		digits = ""
+
 	# get the base metadata from the first fused image
 	meta = MetadataTools.createOMEXMLMetadata()
 	reader = get_reader(output_path+"img_t1_z%s1_c1"%digits,meta)
@@ -52,13 +61,6 @@ def write_fused(output_path,channel,sizeZ,theC):
 	color = channel['color']
 	meta.setChannelName(name,0,0)
 	meta.setChannelColor(color,0,0)
-
-	# number of slices will determine filename format
-	digits = "00"
-	if sizeZ < 100:
-		digits = "0"
-	if sizeZ < 10:
-		digits = ""
 		
 	# determine the number of subsets that need to be written
 	slices_per_subset = 200
@@ -77,7 +79,7 @@ def write_fused(output_path,channel,sizeZ,theC):
 			nslices.append(num_output_files[1])		
 		
 		for s in range(len(nslices)):
-			fpaths.append("%sfused_subset%s_C%s.ome.tif"%(output_path,str(s),str(theC-1)))
+			fpaths.append("%sfused_C%s_subset%s.ome.tif"%(output_path,str(theC-1),str(s)))
 
 	# setup a writer
 	writer = ImageWriter()
@@ -90,14 +92,14 @@ def write_fused(output_path,channel,sizeZ,theC):
 	for f in range(len(fpaths)):
 		writer.changeOutputFile(fpaths[f])
 		for s in range(nslices[f]):
-			fpath = output_path+"img_t1_z%s%s_c%s"%(digits,str(theZ+1),str(theC))
+			fpath = output_path+"img_t1_z%s%s_c1"%(digits,str(theZ+1))
 			if (len(digits) == 1) and (theZ+1 > 9):
-				fpath = output_path+"img_t1_z%s_c%s"%(str(theZ+1),str(theC))
+				fpath = output_path+"img_t1_z%s_c1"%(str(theZ+1))
 			if (len(digits) == 2) and (theZ+1 > 9):
-				fpath = output_path+"img_t1_z0%s_c%s"%(str(theZ+1),str(theC))
+				fpath = output_path+"img_t1_z0%s_c1"%(str(theZ+1))
 			if (len(digits) == 2) and (theZ+1 > 99):
-				fpath = output_path+"img_t1_z%s_c%s"%(str(theZ+1),str(theC))
-			print fpath
+				fpath = output_path+"img_t1_z%s_c1"%(str(theZ+1))
+			IJ.log("writing slice %s"%os.path.basename(fpath))
 			m = MetadataTools.createOMEXMLMetadata()
 			r = get_reader(fpath,m)
 			writer.saveBytes(theZ,r.openBytes(0))
@@ -184,6 +186,7 @@ def run_script(input_dir,gridX,gridY,select_channel,channel):
 	print digits
 	original_metadata = []
 	for filename in input_data:
+		IJ.log("Transforming metadata in image %s"%os.path.basename(filename))
 		meta = MetadataTools.createOMEXMLMetadata()
 		reader = get_reader(filename,meta)
 		original_metadata.append(meta)
@@ -218,8 +221,10 @@ def run_script(input_dir,gridX,gridY,select_channel,channel):
 	# restore original metadata and filename to tiles
 	rewritten_data = glob.glob("%s*.tiff"%input_dir)
 	for f,filename in enumerate(rewritten_data):
+		new_filename = prefix+os.path.basename(filename)
+		IJ.log("Rewriting original meta data in image %s"%os.path.basename(new_filename))
 		replace_meta(original_metadata[f],filename)
-		os.rename(filename,prefix+os.path.basename(filename))
+		os.rename(filename,new_filename)
 
 	delete_slices(input_dir)
 		
