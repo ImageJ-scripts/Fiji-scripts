@@ -38,32 +38,6 @@ def delete_slices(slices_dir):
 
 def write_fused(output_path,channel,sizeZ,theC):
 
-	# number of slices will determine filename format
-	digits = "00"
-	if sizeZ < 100:
-		digits = "0"
-	if sizeZ < 10:
-		digits = ""
-		
-	# determine the number of subsets that need to be written
-	slices_per_subset = 200
-	num_output_files = divmod(sizeZ,slices_per_subset)
-	fpaths = []
-	if num_output_files[0] == 0:
-		nslices = [sizeZ]
-		num_output_files = 1
-		fpaths.append("%sfused.ome.tif"%output_path)
-	else:
-		nslices = []
-		for n in range(num_output_files[0]):
-			nslices.append(slices_per_subset)
-
-		if num_output_files[1] > 0:
-			nslices.append(num_output_files[1])		
-		
-		for s in range(len(nslices)):
-			fpaths.append("%sfused_subset%s.ome.tif"%(output_path,str(s)))
-
 	# get the base metadata from the first fused image
 	meta = MetadataTools.createOMEXMLMetadata()
 	reader = get_reader(output_path+"img_t1_z%s1_c1"%digits,meta)
@@ -78,6 +52,32 @@ def write_fused(output_path,channel,sizeZ,theC):
 	color = channel['color']
 	meta.setChannelName(name,0,0)
 	meta.setChannelColor(color,0,0)
+
+	# number of slices will determine filename format
+	digits = "00"
+	if sizeZ < 100:
+		digits = "0"
+	if sizeZ < 10:
+		digits = ""
+		
+	# determine the number of subsets that need to be written
+	slices_per_subset = 200
+	num_output_files = divmod(sizeZ,slices_per_subset)
+	fpaths = []
+	if num_output_files[0] == 0:
+		nslices = [sizeZ]
+		num_output_files = 1
+		fpaths.append("%s%sfused.ome.tif"%(name,output_path))
+	else:
+		nslices = []
+		for n in range(num_output_files[0]):
+			nslices.append(slices_per_subset)
+
+		if num_output_files[1] > 0:
+			nslices.append(num_output_files[1])		
+		
+		for s in range(len(nslices)):
+			fpaths.append("%s%sfused_subset%s.ome.tif"%(name,output_path,str(s)))
 
 	# setup a writer
 	writer = ImageWriter()
@@ -95,7 +95,7 @@ def write_fused(output_path,channel,sizeZ,theC):
 				fpath = output_path+"img_t1_z%s_c%s"%(str(theZ+1),str(theC))
 			if (len(digits) == 2) and (theZ+1 > 9):
 				fpath = output_path+"img_t1_z0%s_c%s"%(str(theZ+1),str(theC))
-			if (len(digits) == 1) and (theZ+1 > 99):
+			if (len(digits) == 2) and (theZ+1 > 99):
 				fpath = output_path+"img_t1_z%s_c%s"%(str(theZ+1),str(theC))
 			print fpath
 			m = MetadataTools.createOMEXMLMetadata()
