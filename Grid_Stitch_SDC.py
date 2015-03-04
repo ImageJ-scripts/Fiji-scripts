@@ -67,7 +67,7 @@ def write_fused(output_path,channel,sizeZ,theC):
 	if num_output_files[0] == 0:
 		nslices = [sizeZ]
 		num_output_files = 1
-		fpaths.append("%s%sfused.ome.tif"%(name,output_path))
+		fpaths.append("%sfused_C%s.ome.tif"%(output_path,str(theC-1)))
 	else:
 		nslices = []
 		for n in range(num_output_files[0]):
@@ -77,7 +77,7 @@ def write_fused(output_path,channel,sizeZ,theC):
 			nslices.append(num_output_files[1])		
 		
 		for s in range(len(nslices)):
-			fpaths.append("%s%sfused_subset%s.ome.tif"%(name,output_path,str(s)))
+			fpaths.append("%sfused_subset%s_C%s.ome.tif"%(output_path,str(s),str(theC-1)))
 
 	# setup a writer
 	writer = ImageWriter()
