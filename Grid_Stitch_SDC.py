@@ -36,6 +36,15 @@ def delete_slices(slices_dir):
 	except:
 		pass 
 
+def restore_metadata(input_dir,original_metadata,prefix):
+	# restore original metadata and filename to tiles
+	rewritten_data = glob.glob("%s*.tiff"%input_dir)
+	for f,filename in enumerate(rewritten_data):
+		new_filename = prefix+os.path.basename(filename)
+		IJ.log("Rewriting original meta data in image %s"%os.path.basename(new_filename))
+		replace_meta(original_metadata[f],filename)
+		os.rename(filename,new_filename)
+
 def write_fused(output_path,channel,sizeZ,theC):
 
 	IJ.log("Writing fused data")
@@ -174,19 +183,24 @@ def get_reader(file, complete_meta):
 	reader.setId(file)
 	return reader
 
-def run_script(input_dir,gridX,gridY,select_channel,channel):
+def run_script(params):
+
+	input_dir = params['directory']
+	gridX = params['gridX']
+	gridY = params['gridY']
+	select_channel = params['select_channel']
+	channel = params['channel']
 
 	input_data = glob.glob("%s*.tiff"%input_dir)
 	first = [s for s in input_data if "T0_C0" in s][0]
 	start = first.index("Z")+1
 	sub = first[start:]
 	stop = sub.index("_")
-	digits = sub[:stop]
+	digits = sub[:stop-1]
 	sep = os.path.sep
-	print digits
+			
 	original_metadata = []
 	for filename in input_data:
-		IJ.log("Transforming metadata in image %s"%os.path.basename(filename))
 		meta = MetadataTools.createOMEXMLMetadata()
 		reader = get_reader(filename,meta)
 		original_metadata.append(meta)
@@ -194,37 +208,44 @@ def run_script(input_dir,gridX,gridY,select_channel,channel):
 
 	complete_meta = original_metadata[0]
 	channels = channel_info(complete_meta)
+	if len(input_data) != (gridX * gridY * len(channels)):
+		IJ.log("Stopped stitching - gridX or gridY not set correctly")
+		return
+		
 	num_tiles,num_slices = tile_info(complete_meta)
-	for t in range(num_tiles):
-		for c,chan in enumerate(channels):
-			frag = "Z%s_T%s_C%s"%(digits,t,c)
-			input_path = [s for s in input_data if frag in s][0]
-			tile_meta = MetadataTools.createOMEXMLMetadata()
-			tile_meta = set_metadata(complete_meta,tile_meta,chan)
-			replace_meta(tile_meta,input_path)
+	if params['separate_z']:
+		sizeZ = num_slices
+	else:
+		sizeZ = 1
+		
+	for z in range(sizeZ):
+		for t in range(num_tiles):
+			for c,chan in enumerate(channels):
+				frag = "Z%s%s_T%s_C%s"%(digits,z,t,c)
+				input_path = [s for s in input_data if frag in s][0]
+				IJ.log("Transforming metadata in image %s"%os.path.basename(input_path))
+				tile_meta = MetadataTools.createOMEXMLMetadata()
+				tile_meta = set_metadata(complete_meta,tile_meta,chan)
+				replace_meta(tile_meta,input_path)
 
-	idx = input_data[0].index("Z%s_T0_C0.tiff"%digits)
+	idx = input_data[0].index("Z%s0_T0_C0.tiff"%digits)
 	prefix = input_data[0][:idx]
 	for filename in input_data:
 		os.rename(filename,input_dir+filename[idx:])
 		
 	if select_channel:
-		tile_names = "Z%s_T{i}_C%s.tiff"%(digits,channel)
-		run_stitching(input_dir,tile_names,gridX,gridY)
-		write_fused(input_dir,channels[channel],num_slices,channel+1) # channel index starts at 1
-	else:
-		for theC in range(len(channels)):
-			tile_names = "Z%s_T{i}_C%s.tiff"%(digits,theC)
+		for z in range(sizeZ):
+			tile_names = "Z%s%s_T{i}_C%s.tiff"%(digits,z,channel)
 			run_stitching(input_dir,tile_names,gridX,gridY)
-			write_fused(input_dir,channels[theC],num_slices,theC+1) # channel index starts at 1
-
-	# restore original metadata and filename to tiles
-	rewritten_data = glob.glob("%s*.tiff"%input_dir)
-	for f,filename in enumerate(rewritten_data):
-		new_filename = prefix+os.path.basename(filename)
-		IJ.log("Rewriting original meta data in image %s"%os.path.basename(new_filename))
-		replace_meta(original_metadata[f],filename)
-		os.rename(filename,new_filename)
+			restore_metadata(input_dir,original_metadata,prefix)
+			write_fused(input_dir,channels[channel],num_slices,channel+1) # channel index starts at 1
+	else:
+		for c in range(len(channels)):
+			for z in range(sizeZ):
+				tile_names = "Z%s%s_T{i}_C%s.tiff"%(digits,z,c)
+				run_stitching(input_dir,tile_names,gridX,gridY)
+				restore_metadata(input_dir,original_metadata,prefix)
+				write_fused(input_dir,channels[c],num_slices,c+1) # channel index starts at 1
 
 	delete_slices(input_dir)
 		
@@ -248,6 +269,7 @@ def make_dialog():
 	gd.addNumericField("grid_size_y", 3, 0)
 	gd.addCheckbox("Select channel",False)
 	gd.addNumericField("", 0, 0)		
+	gd.addCheckbox("Z slices as separate files?",False)
 	gd.addDirectoryField("directory", "", 50)
 	
 	gd.showDialog()
@@ -259,6 +281,8 @@ def make_dialog():
 	parameters['channel'] = None
 	if parameters['select_channel']:
 		parameters['channel'] = int(gd.getNextNumber())
+
+	parameters['separate_z'] = gd.getNextBoolean()
 	
 	directory = str(gd.getNextString())	
 	if directory is None:
@@ -273,10 +297,4 @@ def make_dialog():
 if __name__=='__main__':
 
 	params = make_dialog()
-	input_dir = params['directory']
-	gridX = params['gridX']
-	gridY = params['gridY']
-	select_channel = params['select_channel']
-	channel = params['channel']
-
-	run_script(input_dir,gridX,gridY,select_channel,channel)
+	run_script(params)
