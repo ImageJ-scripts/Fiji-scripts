@@ -238,14 +238,14 @@ def run_script(params):
 			tile_names = "Z%s%s_T{i}_C%s.tiff"%(digits,z,channel)
 			run_stitching(input_dir,tile_names,gridX,gridY)
 			restore_metadata(input_dir,original_metadata,prefix)
-			write_fused(input_dir,channels[channel],num_slices,channel+1) # channel index starts at 1
+			write_fused(input_dir,channels[channel],sizeZ,channel+1) # channel index starts at 1
 	else:
 		for c in range(len(channels)):
 			for z in range(sizeZ):
 				tile_names = "Z%s%s_T{i}_C%s.tiff"%(digits,z,c)
 				run_stitching(input_dir,tile_names,gridX,gridY)
 				restore_metadata(input_dir,original_metadata,prefix)
-				write_fused(input_dir,channels[c],num_slices,c+1) # channel index starts at 1
+				write_fused(input_dir,channels[c],sizeZ,c+1) # channel index starts at 1
 
 	delete_slices(input_dir)
 		
