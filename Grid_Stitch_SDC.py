@@ -45,7 +45,7 @@ def restore_metadata(input_dir,original_metadata,prefix):
 		replace_meta(original_metadata[f],filename)
 		os.rename(filename,new_filename)
 
-def write_fused(output_path,channel,sizeZ,theC):
+def write_fused(output_path,channel,sizeZ,theC,physX,physY,physZ):
 
 	IJ.log("Writing fused data")
 
@@ -62,6 +62,9 @@ def write_fused(output_path,channel,sizeZ,theC):
 	reader.close()
 	
 	# reset some metadata
+	meta.setPixelsPhysicalSizeX(physX,0)
+	meta.setPixelsPhysicalSizeY(physY,0)
+	meta.setPixelsPhysicalSizeZ(physZ,0)
 	meta.setPixelsSizeZ(PositiveInteger(sizeZ),0)
 	meta.setChannelID("Channel:0:" + str(0), 0, 0)
 	spp = channel['spp']
@@ -99,6 +102,7 @@ def write_fused(output_path,channel,sizeZ,theC):
 	# write the slices, changing the output file when necessary
 	theZ = 0
 	for f in range(len(fpaths)):
+		meta.setImageName(os.path.basename(fpaths[f]),0)
 		writer.changeOutputFile(fpaths[f])
 		for s in range(nslices[f]):
 			fpath = output_path+"img_t1_z%s%s_c1"%(digits,str(theZ+1))
@@ -160,6 +164,12 @@ def set_metadata(inputMeta,outputMeta,chan):
 	outputMeta.setChannelColor(color,0,0)
 	
 	return outputMeta
+
+def pixel_info(meta):
+	physX = meta.getPixelsPhysicalSizeZ(0)
+	physY = meta.getPixelsPhysicalSizeZ(0)
+	physZ = meta.getPixelsPhysicalSizeZ(0)
+	return physX,physY,physZ
 
 def tile_info(meta):
 	tiles = meta.getPixelsSizeT(0).getValue()
@@ -233,19 +243,22 @@ def run_script(params):
 	for filename in input_data:
 		os.rename(filename,input_dir+filename[idx:])
 		
+	physX,physY,physZ = pixel_info(complete_meta)		
 	if select_channel:
 		for z in range(sizeZ):
 			tile_names = "Z%s%s_T{i}_C%s.tiff"%(digits,z,channel)
 			run_stitching(input_dir,tile_names,gridX,gridY)
 			restore_metadata(input_dir,original_metadata,prefix)
-			write_fused(input_dir,channels[channel],num_slices,channel+1) # channel index starts at 1
+			write_fused(input_dir,channels[channel],num_slices,channel+1,\
+						physX,physY,physZ) # channel index starts at 1
 	else:
 		for c in range(len(channels)):
 			for z in range(sizeZ):
 				tile_names = "Z%s%s_T{i}_C%s.tiff"%(digits,z,c)
 				run_stitching(input_dir,tile_names,gridX,gridY)
 				restore_metadata(input_dir,original_metadata,prefix)
-				write_fused(input_dir,channels[c],num_slices,c+1) # channel index starts at 1
+				write_fused(input_dir,channels[c],num_slices,c+1,\
+							physX,physY,physZ) # channel index starts at 1
 
 	delete_slices(input_dir)
 		
