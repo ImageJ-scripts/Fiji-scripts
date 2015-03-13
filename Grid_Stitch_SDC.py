@@ -4,7 +4,7 @@ import glob
 import time
 import math
 import shutil
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as etree
 
 import ij
 from ij import IJ
@@ -25,6 +25,7 @@ from loci.formats.tiff import TiffSaver
 
 from ome.xml.meta import OMEXMLMetadata
 from ome.xml.model.primitives import PositiveInteger,PositiveFloat
+from ome.xml.model.primitives import NonNegativeInteger as NNI
 from ome.xml.model.enums import DimensionOrder, PixelType
 
 from java.lang import StringBuffer
@@ -45,6 +46,69 @@ def restore_metadata(input_dir,original_metadata,prefix):
 		replace_meta(original_metadata[f],filename)
 		os.rename(filename,new_filename)
 
+def link_slices(output_path,channel,sizeZ,theC,physX,physY,physZ):
+
+	IJ.log("Linking z slices")
+
+	# number of slices will determine filename format
+	digits = "00"
+	if sizeZ < 100:
+		digits = "0"
+	if sizeZ < 10:
+		digits = ""
+
+	# get the base metadata from the first fused image
+	z0meta = MetadataTools.createOMEXMLMetadata()
+	fused = glob.glob(output_path + "fused*")
+	first_fused = fused[0]
+	reader = get_reader(first_fused,z0meta)
+	z0meta.setPixelsSizeZ(PositiveInteger(sizeZ),0)
+	reader.close()
+
+	for z in range(sizeZ):
+		fpath = fused[z]
+		IJ.log("writing metadata to slice %s"%os.path.basename(fpath))
+		m = MetadataTools.createOMEXMLMetadata()
+		r = get_reader(fpath,m)
+
+		# set the TiffData elements on the first plane
+		# setTiffData(IFD, image index, TiffData index)
+		z0meta.setTiffDataIFD(NNI(0),0,z)
+		# setTiffDataPlaneCount(planecount, image index, TiffData index)
+		z0meta.setTiffDataPlaneCount(NNI(1),0,z)
+		# setTiffDataFirstC(firstC, image index, TiffData index)
+		z0meta.setTiffDataFirstC(NNI(0),0,z)
+		# setTiffDataFirstC(firstT, image index, TiffData index)
+		z0meta.setTiffDataFirstT(NNI(0),0,z)
+		# setTiffDataFirstC(firstZ, image index, TiffData index)
+		z0meta.setTiffDataFirstZ(NNI(0),z,z)
+		# setUUIDFileName(filename, image index, TiffData index)
+		z0meta.setUUIDFileName(m.getUUIDFileName(0,0),0,0)
+		# setUUIDValue(value, image index, TiffData index)
+		z0meta.setUUIDValue(m.getUUIDValue(0,0),0,0)
+
+		# set the physical pixel sizes on each plane
+		m.setPixelsPhysicalSizeX(physX,0)
+		m.setPixelsPhysicalSizeY(physY,0)
+		m.setPixelsPhysicalSizeZ(physZ,0)
+
+		# set the channel attributes on each plane
+		m.setChannelID("Channel:0:" + str(0), 0, 0)
+		spp = channel['spp']
+		m.setChannelSamplesPerPixel(spp, 0, 0)
+		name = channel['name']
+		color = channel['color']
+		m.setChannelName(name,0,0)
+		m.setChannelColor(color,0,0)
+		r.close()
+
+		# replace the metadata in the slice
+		if z > 0:
+			replace_meta(m,fpath)
+
+	replace_meta(z0meta,first_fused)
+
+	
 def write_fused(output_path,channel,sizeZ,theC,physX,physY,physZ):
 
 	IJ.log("Writing fused data")
@@ -60,7 +124,7 @@ def write_fused(output_path,channel,sizeZ,theC,physX,physY,physZ):
 	meta = MetadataTools.createOMEXMLMetadata()
 	reader = get_reader(output_path+"img_t1_z%s1_c1"%digits,meta)
 	reader.close()
-	
+	get_tiffdata(meta)
 	# reset some metadata
 	meta.setPixelsPhysicalSizeX(physX,0)
 	meta.setPixelsPhysicalSizeY(physY,0)
@@ -114,7 +178,18 @@ def write_fused(output_path,channel,sizeZ,theC,physX,physY,physZ):
 				fpath = output_path+"img_t1_z%s_c1"%(str(theZ+1))
 			IJ.log("writing slice %s"%os.path.basename(fpath))
 			m = MetadataTools.createOMEXMLMetadata()
+			print "tiffData",m.getTiffData()
 			r = get_reader(fpath,m)
+			m.setPixelsPhysicalSizeX(physX,0)
+			m.setPixelsPhysicalSizeY(physY,0)
+			m.setPixelsPhysicalSizeZ(physZ,0)
+			m.setChannelID("Channel:0:" + str(0), 0, 0)
+			spp = channel['spp']
+			m.setChannelSamplesPerPixel(spp, 0, 0)
+			name = channel['name']
+			color = channel['color']
+			m.setChannelName(name,0,0)
+			m.setChannelColor(color,0,0)
 			writer.saveBytes(theZ,r.openBytes(0))
 			r.close()
 			theZ += 1
@@ -184,6 +259,7 @@ def channel_info(meta):
 		chan_d['spp'] = meta.getChannelSamplesPerPixel(0,c)
 		chan_d['name'] = meta.getChannelName(0,c)
 		chan_d['color'] = meta.getChannelColor(0,c)
+		chan_d['ID'] = c
 		channels.append(chan_d)
 	return channels
 		
@@ -217,10 +293,14 @@ def run_script(params):
 		reader.close()
 
 	complete_meta = original_metadata[0]
-	channels = channel_info(complete_meta)
-	if len(input_data) != (gridX * gridY * len(channels)):
+	channels_meta = channel_info(complete_meta)
+	if len(input_data) != (gridX * gridY * len(channels_meta)):
 		IJ.log("Stopped stitching - gridX or gridY not set correctly")
 		return
+	
+	channels = channels_meta
+	if select_channel:
+		channels = [channels_meta[channel]] # a list of len 1 with a dictionary of channel metadata
 		
 	num_tiles,num_slices = tile_info(complete_meta)
 	if params['separate_z']:
@@ -231,7 +311,7 @@ def run_script(params):
 	for z in range(sizeZ):
 		for t in range(num_tiles):
 			for c,chan in enumerate(channels):
-				frag = "Z%s%s_T%s_C%s"%(digits,z,t,c)
+				frag = "Z%s%s_T%s_C%s"%(digits,z,t,chan['ID'])
 				input_path = [s for s in input_data if frag in s][0]
 				IJ.log("Transforming metadata in image %s"%os.path.basename(input_path))
 				tile_meta = MetadataTools.createOMEXMLMetadata()
@@ -240,25 +320,22 @@ def run_script(params):
 
 	idx = input_data[0].index("Z%s0_T0_C0.tiff"%digits)
 	prefix = input_data[0][:idx]
+	trunc_filenames = []
 	for filename in input_data:
-		os.rename(filename,input_dir+filename[idx:])
+		new_filename = input_dir+filename[idx:]
+		os.rename(filename,new_filename)
+		trunc_filenames.append(new_filename)
+
+	while not os.path.exists(trunc_filenames[-1]):
+	   time.sleep(1)
 		
-	physX,physY,physZ = pixel_info(complete_meta)		
-	if select_channel:
-		for z in range(sizeZ):
-			tile_names = "Z%s%s_T{i}_C%s.tiff"%(digits,z,channel)
-			run_stitching(input_dir,tile_names,gridX,gridY)
-			restore_metadata(input_dir,original_metadata,prefix)
-			write_fused(input_dir,channels[channel],num_slices,channel+1,\
-						physX,physY,physZ) # channel index starts at 1
-	else:
-		for c in range(len(channels)):
-			for z in range(sizeZ):
-				tile_names = "Z%s%s_T{i}_C%s.tiff"%(digits,z,c)
-				run_stitching(input_dir,tile_names,gridX,gridY)
-				restore_metadata(input_dir,original_metadata,prefix)
-				write_fused(input_dir,channels[c],num_slices,c+1,\
-							physX,physY,physZ) # channel index starts at 1
+	physX,physY,physZ = pixel_info(complete_meta)	
+	for c,chan in enumerate(channels):
+		tile_names = "Z%s0_T{i}_C%s.tiff"%(digits,chan['ID'])
+		run_stitching(input_dir,tile_names,gridX,gridY)
+		restore_metadata(input_dir,original_metadata,prefix)
+		write_fused(input_dir,chan,num_slices,c+1,\
+					physX,physY,physZ) # channel index starts at 1
 
 	delete_slices(input_dir)
 		
@@ -282,7 +359,7 @@ def make_dialog():
 	gd.addNumericField("grid_size_y", 3, 0)
 	gd.addCheckbox("Select channel",False)
 	gd.addNumericField("", 0, 0)		
-	gd.addCheckbox("Z slices as separate files?",False)
+	gd.addCheckbox("Are the Z slices separate files?",False)
 	gd.addDirectoryField("directory", "", 50)
 	
 	gd.showDialog()
@@ -294,8 +371,6 @@ def make_dialog():
 	parameters['channel'] = None
 	if parameters['select_channel']:
 		parameters['channel'] = int(gd.getNextNumber())
-
-	parameters['separate_z'] = gd.getNextBoolean()
 	
 	directory = str(gd.getNextString())	
 	if directory is None:
