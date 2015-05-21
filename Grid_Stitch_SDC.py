@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import os
 import glob
 import time
@@ -124,7 +124,7 @@ def write_fused(output_path,channel,sizeZ,theC,physX,physY,physZ):
 	meta = MetadataTools.createOMEXMLMetadata()
 	reader = get_reader(output_path+"img_t1_z%s1_c1"%digits,meta)
 	reader.close()
-	get_tiffdata(meta)
+	
 	# reset some metadata
 	meta.setPixelsPhysicalSizeX(physX,0)
 	meta.setPixelsPhysicalSizeY(physY,0)
@@ -178,7 +178,7 @@ def write_fused(output_path,channel,sizeZ,theC,physX,physY,physZ):
 				fpath = output_path+"img_t1_z%s_c1"%(str(theZ+1))
 			IJ.log("writing slice %s"%os.path.basename(fpath))
 			m = MetadataTools.createOMEXMLMetadata()
-			print "tiffData",m.getTiffData()
+			
 			r = get_reader(fpath,m)
 			m.setPixelsPhysicalSizeX(physX,0)
 			m.setPixelsPhysicalSizeY(physY,0)
@@ -333,10 +333,10 @@ def run_script(params):
 	for c,chan in enumerate(channels):
 		tile_names = "Z%s0_T{i}_C%s.tiff"%(digits,chan['ID'])
 		run_stitching(input_dir,tile_names,gridX,gridY)
-		restore_metadata(input_dir,original_metadata,prefix)
 		write_fused(input_dir,chan,num_slices,c+1,\
 					physX,physY,physZ) # channel index starts at 1
-
+					
+	restore_metadata(input_dir,original_metadata,prefix)
 	delete_slices(input_dir)
 		
 def make_dialog():
@@ -371,7 +371,7 @@ def make_dialog():
 	parameters['channel'] = None
 	if parameters['select_channel']:
 		parameters['channel'] = int(gd.getNextNumber())
-	
+	parameters['separate_z'] = gd.getNextBoolean()
 	directory = str(gd.getNextString())	
 	if directory is None:
 	# User canceled the dialog
